@@ -1,6 +1,5 @@
 from Vec2 import Vec2
 from ray import Ray, RayCollision
-from Interface import Interface, InterfaceBorder
 from Material import Material
 import numpy as np
 from optics import planck_spectral_radiance, fresnel_coefs
@@ -16,7 +15,7 @@ def angle_to_vector(angle_deg: float) -> Vec2:
 class LightRayCollision:
 
     def __init__(self, collision: RayCollision, incoming_ray: Ray, surface_ray: Ray,
-                 mat_new: Material, mat_old: Material, wavelength: float):
+                 mat_new: Material, mat_old: Material, wavelength_meters: float):
         
         self.col = collision
         self.mat_new = mat_new
@@ -44,8 +43,8 @@ class LightRayCollision:
 
         # 4) Ratio of refractive indices
 
-        cn1 = mat_old.get_complex_n(wavelength)
-        cn2 = mat_new.get_complex_n(wavelength)
+        cn1 = mat_old.get_complex_n(wavelength_meters)
+        cn2 = mat_new.get_complex_n(wavelength_meters)
         
         n1 = np.real(cn1)
         n2 = np.real(cn2)
@@ -104,72 +103,7 @@ class LightRay:
         self.wavelength : float = 0.9e-6
         self.temperature : float = 300 # kelving
 
-    def Send(self, interface : Interface):
-        """
-            Will send out a light from the initial position and angle in the interface.
-            
-            1. Determine what border the light ray will hit in this direction   
-                use interface.GetBorderByDirectionFromPoint
-                if no border gets hit ==> light ray outside material
-                discard for now
-
-            2. Construct the LightRayCollisionobject
-                calculate R,T coeffs (1) for now
-                calculate reflected angle and transmitted angle using snel
-
-            3. Return light ray collision object
-
-            
-            Returns:
-                A list of the reflected and transmitted light rays (if their troughputs are relevant) List can be of length zero
-        """
-
-        border_index : int = interface.GetBorderByDirectionFromPoint(self._ray.source_pos, self._angle, 4000)
-        if (border_index == None):
-            return None
-        
-        border : InterfaceBorder = interface._borders[border_index]
-
-        # can optimize this; this is already being done once in GetBorderByDireciotn
-        col : RayCollision = border.Collision(self._ray)
-        if col == None:
-            return []
-
-        # can also be optimized (we can kinda gues in what material the light ray should be instead of
-        # doing a shitton of calculations)
-        new_mat , old_mat = self._get_materials(interface, border_index, col) 
-
-        # updating this light rays settings
-        lr = LightRayCollision(col, self._ray, col.surface_ray, new_mat, old_mat, self.wavelength)
-        self._update_throughput(lr)
-
-        # creating the reflected/transmitted child light rays
-        lr_reflec = LightRay(col.point, lr.reflected_angle)
-        lr_transm = LightRay(col.point, lr.transmitted_angle)
-
-        # updating the throughputs of the reflected and transmitted lighrays
-        lr_reflec.throughput *= lr.reflected_coef
-        lr_transm.throughput *= lr.transmitt_coef
-
-        # giving the same emitted radiance/temper/wavel
-        lr_reflec.emitted_radiance = self.emitted_radiance
-        lr_transm.emitted_radiance = self.emitted_radiance
-
-        lr_reflec.temperature = self.temperature
-        lr_transm.temperature = self.temperature
-
-        lr_reflec.wavelength = self.wavelength
-        lr_transm.wavelength = self.wavelength
-
-        children = []
-        if lr_reflec.throughput >= 1e-3:
-            children.append(lr_reflec)
-        if lr_transm.throughput >= 1e-3:
-            children.append(lr_transm)
-        
-        return children
-
-    # def Send(self, interface : Interface) -> LightRayCollision:
+    # def Send(self, interface : Interface):
     #     """
     #         Will send out a light from the initial position and angle in the interface.
             
@@ -186,10 +120,10 @@ class LightRay:
 
             
     #         Returns:
-    #             None is no border is hit (light ray outside material). LightRayCollsion object if a border is hit
+    #             A list of the reflected and transmitted light rays (if their troughputs are relevant) List can be of length zero
     #     """
 
-    #     border_index : int = interface.GetBorderByDirectionFromPoint(self._ray.source_pos, self._angle, 2000)
+    #     border_index : int = interface.GetBorderByDirectionFromPoint(self._ray.source_pos, self._angle, 4000)
     #     if (border_index == None):
     #         return None
         
@@ -198,7 +132,7 @@ class LightRay:
     #     # can optimize this; this is already being done once in GetBorderByDireciotn
     #     col : RayCollision = border.Collision(self._ray)
     #     if col == None:
-    #         return None
+    #         return []
 
     #     # can also be optimized (we can kinda gues in what material the light ray should be instead of
     #     # doing a shitton of calculations)
@@ -208,32 +142,96 @@ class LightRay:
     #     lr = LightRayCollision(col, self._ray, col.surface_ray, new_mat, old_mat, self.wavelength)
     #     self._update_throughput(lr)
 
-    #     return lr
-    
+    #     # creating the reflected/transmitted child light rays
+    #     lr_reflec = LightRay(col.point, lr.reflected_angle)
+    #     lr_transm = LightRay(col.point, lr.transmitted_angle)
 
-    def _update_throughput(self, LR_col : LightRayCollision):
-        """
-            Uses the given lightraycollision object to correctly adjust the throughput and spectral radiance of this LightRay.
-            Is called by the Send() function at the end.
-        """
+    #     # updating the throughputs of the reflected and transmitted lighrays
+    #     lr_reflec.throughput *= lr.reflected_coef
+    #     lr_transm.throughput *= lr.transmitt_coef
+
+    #     # giving the same emitted radiance/temper/wavel
+    #     lr_reflec.emitted_radiance = self.emitted_radiance
+    #     lr_transm.emitted_radiance = self.emitted_radiance
+
+    #     lr_reflec.temperature = self.temperature
+    #     lr_transm.temperature = self.temperature
+
+    #     lr_reflec.wavelength = self.wavelength
+    #     lr_transm.wavelength = self.wavelength
+
+    #     children = []
+    #     if lr_reflec.throughput >= 1e-3:
+    #         children.append(lr_reflec)
+    #     if lr_transm.throughput >= 1e-3:
+    #         children.append(lr_transm)
         
-        # figuring out the distance that this light ray travlled in the layer
-        d = Vec2.Distance(self._ray.source_pos, LR_col.col.point)
+    #     return children
 
-        # getting the absorption coefficient of the material we just traversed through
-        alpha = LR_col.mat_old.get_absorption_coefficient(self.wavelength)
+    def _send(self, interface ) -> LightRayCollision:
+        """
+            Will send out a light from the initial position and angle in the interface.
+            
+            1. Determine what border the light ray will hit in this direction   
+                use interface.GetBorderByDirectionFromPoint
+                if no border gets hit ==> light ray outside material
+                discard for now
 
-        # calculating the attenuteitn and emissivity of the layer
-        attenuation = np.exp(-1 * d * alpha)
-        emis_layer = 1 - attenuation
-        B = planck_spectral_radiance(self.wavelength * 1e-6, self.temperature)
-        emit = emis_layer * B
+            2. Construct the LightRayCollisionobject
+                calculate R,T coeffs (1) for now
+                calculate reflected angle and transmitted angle using snel
 
-        # adjusting our variables
-        self.emitted_radiance += self.throughput * emit
-        self.throughput *= attenuation
+            3. Return light ray collision object
 
-    def _get_materials(self, interface : Interface, border_index : int, col : RayCollision) -> tuple[Material]:
+            
+            Returns:
+                None is no border is hit (light ray outside material). LightRayCollsion object if a border is hit
+        """
+
+        border_index : int = interface.GetBorderByDirectionFromPoint(self._ray.source_pos, self._angle, 2000)
+        if (border_index == None):
+            return None
+        
+        border = interface._borders[border_index]
+
+        # can optimize this; this is already being done once in GetBorderByDireciotn
+        col : RayCollision = border.Collision(self._ray)
+        if col == None:
+            return None
+
+        # can also be optimized (we can kinda gues in what material the light ray should be instead of
+        # doing a shitton of calculations)
+        new_mat , old_mat = self._get_materials(interface, border_index, col) 
+
+        # updating this light rays settings
+        lr = LightRayCollision(col, self._ray, col.surface_ray, new_mat, old_mat, self.wavelength)
+        # self._update_throughput(lr)
+
+        return lr
+
+    # def _update_throughput(self, LR_col : LightRayCollision):
+    #     """
+    #         Uses the given lightraycollision object to correctly adjust the throughput and spectral radiance of this LightRay.
+    #         Is called by the Send() function at the end.
+    #     """
+        
+    #     # figuring out the distance that this light ray travlled in the layer
+    #     d = Vec2.Distance(self._ray.source_pos, LR_col.col.point)
+
+    #     # getting the absorption coefficient of the material we just traversed through
+    #     alpha = LR_col.mat_old.get_absorption_coefficient(self.wavelength)
+
+    #     # calculating the attenuteitn and emissivity of the layer
+    #     attenuation = np.exp(-1 * d * alpha)
+    #     emis_layer = 1 - attenuation
+    #     B = planck_spectral_radiance(self.wavelength * 1e-6, self.temperature)
+    #     emit = emis_layer * B
+
+    #     # adjusting our variables
+    #     self.emitted_radiance += self.throughput * emit
+    #     self.throughput *= attenuation
+
+    def _get_materials(self, interface, border_index : int, col : RayCollision) -> tuple[Material]:
         """
             Returns:
                 A tuple consisitng of: the new material, the current material 

@@ -1,7 +1,10 @@
 from Mesh import Mesh
 from Vec2 import Vec2
 from ray import Ray, RayCollision
+from LightRay import LightRay, LightRayCollision
 from Material import Material
+import numpy as np
+from optics import planck_spectral_radiance
 
 class InterfaceBorder:
 
@@ -51,42 +54,7 @@ class InterfaceBorder:
     def move_right(self, offset):
         self._mesh.add_offset(Vec2(offset, 0))
         self._mesh_rays = None # should be recalculated
-        
-
-    def Collision2(self, ray : Ray) -> RayCollision:
-        """
-            Splits the mesh up into small rays and performs Ray.Collision() between
-            these and the given ray
-
-            Returns:
-                None if there is not collision, otherwise a Vec2 with the point of collision.
-        """
-
-        if (self._mesh_rays == None):
-            self._mesh_rays = self._mesh.rayify()
-
-        # want to get the closest possible collision
-        record_distance = 1e10
-        record_col = None
-
-        for r in self._mesh_rays:
-            col = Ray.Collision(ray, r)
-            if (col != None):
-                dist = Vec2.Distance(ray.source_pos, col.point)
-                if dist <= record_distance:
-                    record_distance = dist
-                    record_col = col
-
-                    print("Ray 1 angle : " + str(ray.GetAngle()))
-                    print("Surface ray anglze : " + str(r.GetAngle()))
-
-            # if (Ray.Collision(ray, r) != None):
-            #     return Ray.Collision(ray, r)
-        
-
-
-        return record_col
-    
+            
     def Collision(self, ray: Ray) -> RayCollision:
         """
             Splits the mesh into small rays and performs Ray.Collision() between
@@ -228,8 +196,8 @@ class Interface:
                 something goes wrong lmao.
         """
 
-        topBorder : InterfaceBorder = self.GetTopBorder(point, scanning_height)
-        botBorder : InterfaceBorder = self.GetBotBorder(point, scanning_height)
+        topBorder : InterfaceBorder = self._borders[self.GetTopBorder(point, scanning_height)]
+        botBorder : InterfaceBorder = self._borders[self.GetBotBorder(point, scanning_height)]
         
         if topBorder == None:
             return self._materials[0]
@@ -242,6 +210,78 @@ class Interface:
         return None
 
 
+    def TraceOneRay(self, start_pos : Vec2, direction : float, wavelength : float, temperature : float,
+                    max_depth = 50, energy_treshhold = 0.01, debug=False) -> list[float]:
+        """
+            Traces one ray throughtout the specified geometry.
+
+            Returns:
+                list: [sum of emitted spectral radiance contributions, final throughput]
+        """
+
+        # creating:
+        current_pos : Vec2 = start_pos
+        current_direction : float = direction
+
+        ray_troughput = 1.0 # will be used to determine when to stop
+        accumelated_radiance = 0.0
+        
+
+        for bounce in range(max_depth):
+
+            # should we continue with this ray?
+            if ray_troughput < energy_treshhold:
+                if debug: print("\nRay energy below the treshold.")
+                if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+                if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+                break
+            
+            # initing the Lighray
+            LR = LightRay(current_pos, current_direction)
+            LR.wavelength = wavelength
+            LR.temperature = temperature
+
+            # colliding with the interface
+            LR_Col = LR._send(self)
+
+            if LR_Col == None:
+                # no order is being hit
+                print("\nNo border being hit. Stopping.")
+                if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+                if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+                break
+
+            # if it goes through ==> calculate the new throughput/emitted radiance and such
+            distance_m = Vec2.Distance(current_pos, LR_Col.col.point) * 1e-6 # in meters
+            if distance_m > 1e-12:
+                alpha = LR_Col.mat_old.get_absorption_coefficient(wavelength)
+                attenuation = np.exp(-alpha * distance_m)
+                emissivity = 1.0 - attenuation
+
+                B_lambda_T = planck_spectral_radiance(wavelength, temperature)
+                emitted_radiance_segment = emissivity * B_lambda_T
+                
+                accumelated_radiance += ray_troughput * emitted_radiance_segment
+                ray_troughput *= attenuation
+            
+            # setting new varabiales
+            current_pos = LR_Col.col.point
+            if np.random.random() < LR_Col.reflected_coef:
+                # reflect this 
+                current_direction = LR_Col.reflected_angle
+                print("\nReflecting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
+                if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+                if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+            else:
+                current_direction = LR_Col.transmitted_angle
+                print("\nTransmitting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
+                if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+                if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+        
+            if current_direction < 1e-9:
+                break
+        
+        return accumelated_radiance, ray_troughput
 
 
 

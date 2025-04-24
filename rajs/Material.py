@@ -57,7 +57,7 @@ class Material:
         self._n_data = n_sorted
         self._k_data = k_sorted
 
-    def get_complex_n(self, wavelength: float) -> complex:
+    def get_complex_n(self, wavelength_meters: float) -> complex:
         """
         Returns the complex refractive index at a given wavelength.
 
@@ -66,7 +66,7 @@ class Material:
         Otherwise, it returns the constant n + i*k provided at init.
 
         Args:
-            wavelength (float): Wavelength in micrometers.
+            wavelength (float): Wavelength in meters.
 
         Returns:
             complex: n(wl) + 1j*k(wl)
@@ -74,7 +74,7 @@ class Material:
         Raises:
             ValueError: if wavelength outside the loaded data range.
         """
-        wavelength *= 1e-6
+        wavelength = wavelength_meters
         # if data arrays present, use interpolation
         if self._wavelengths is not None:
             wl_arr = self._wavelengths
@@ -93,19 +93,19 @@ class Material:
         return self._n + 1j * self._k
     
 
-    def get_absorption_coefficient(self, wavelength: float) -> float:
+    def get_absorption_coefficient(self, wavelength_meters: float) -> float:
         """
         Calculate the absorption coefficient α at a given wavelength.
 
         α(λ) = 4π * k(λ) / λ
 
-        - wavelength: in micrometers
-        - returns α in inverse micrometers (µm⁻¹).
+        - wavelength: in meters
+        - returns α in inverse meters (m⁻¹).
         """
         # get extinction coefficient k from complex refractive index
-        cn = self.get_complex_n(wavelength)
+        cn = self.get_complex_n(wavelength_meters)
         k_val = cn.imag
-        return 4 * np.pi * k_val / wavelength
+        return 4 * np.pi * k_val / wavelength_meters
 
     def __repr__(self) -> str:
         return f"Material('{self._name}')"
