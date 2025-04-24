@@ -1,114 +1,155 @@
+import pandas as pd
 import numpy as np
 
+from optics import complex_refractive_index
+
 class Material:
-    """
-    Represents an optical material, providing its complex refractive index.
+# the material class will be used to create a material object with the following properties:
+#     - name: str
+#     - refractive_index: [float, float]
+#     - absorption: [float, float]
+#  it will load the absorption data from a csv file and use core_optical_functions to calculate the refractive index and excting coefficient to be used in the simulation
 
-    Usage for constant refractive index:
-        m = Material(name, n_const, k_const)
-        cn = m.get_complex_n(wl)
-
-    Usage for wavelength-dependent data:
-        m = Material(name, 0.0, 0.0)
-        m.ReadFromFile(filename)
-        cn = m.get_complex_n(wl)
-    """
-
-    def __init__(self, name: str, n: float= 1.0, k: float = 0.0):
-        self._name = name
-        self._n = float(n)
-        self._k = float(k)
-
-        # data arrays will be set when ReadFromFile is called
-        self._wavelengths = None
-        self._n_data = None
-        self._k_data = None
-
-    def ReadFromFile(self, filename: str):
+    def __init__(self, name: str, filename : str, temperature: float = 293.15):
         """
-        Load wavelength-dependent refractive indices from a CSV file.
-        The file must have three comma-separated columns:
-            wavelength (in micrometers), n, k
-
-        Raises:
-            ValueError: if the file format is incorrect or data malformed.
-        """
-        try:
-            data = np.loadtxt(filename, delimiter=',')
-        except Exception as e:
-            raise ValueError(f"Could not read file '{filename}': {e}")
-
-        if data.ndim != 2 or data.shape[1] < 3:
-            raise ValueError(f"File '{filename}' must have at least three columns: wavelength, n, k")
-
-        # parse columns
-        wl = data[:, 0]
-        n_vals = data[:, 1]
-        k_vals = data[:, 2]
-
-        # sort by wavelength to ensure monotonic increase
-        idx = np.argsort(wl)
-        wl_sorted = wl[idx]
-        n_sorted = n_vals[idx]
-        k_sorted = k_vals[idx]
-
-        # store arrays
-        self._wavelengths = wl_sorted
-        self._n_data = n_sorted
-        self._k_data = k_sorted
-
-    def get_complex_n(self, wavelength_meters: float) -> complex:
-        """
-        Returns the complex refractive index at a given wavelength.
-
-        If wavelength-dependent data has been loaded via ReadFromFile,
-        this method will interpolate (linear) within the data range.
-        Otherwise, it returns the constant n + i*k provided at init.
+        Initializes the Material class with a name and a filename for absorption data.
 
         Args:
-            wavelength (float): Wavelength in meters.
-
-        Returns:
-            complex: n(wl) + 1j*k(wl)
-
-        Raises:
-            ValueError: if wavelength outside the loaded data range.
+            name (str): The name of the material.
+            filename (str): The path to the CSV file containing absorption data.
         """
-        # convert to microns
-        wavelength = wavelength_meters * 1e6
+        self.name = name
+        self.filename = filename
+        self.temperature = temperature
         
-        # if data arrays present, use interpolation
-        if self._wavelengths is not None:
-            wl_arr = self._wavelengths
-            # check range
-            if wavelength < wl_arr[0] or wavelength > wl_arr[-1]:
-                raise ValueError(
-                    f"Wavelength {wavelength} is outside data range "
-                    f"({wl_arr[0]} to {wl_arr[-1]})"
-                )
-            # linear interpolation
-            n_interp = np.interp(wavelength, wl_arr, self._n_data)
-            k_interp = np.interp(wavelength, wl_arr, self._k_data)
-            return n_interp + 1j * k_interp
+        self.wl = None
+        self.absorption_coef = None
+                
+        self.refractive_index = None
+        self.exciting_coef = None
 
-        # fallback: constant values
-        return self._n + 1j * self._k
-    
-
-    def get_absorption_coefficient(self, wavelength_meters: float) -> float:
+        if (self.name != "Air"):
+            self.load_absorption_data()
+        
+        
+    def load_absorption_data(self):
         """
-        Calculate the absorption coefficient α at a given wavelength.
-
-        α(λ) = 4π * k(λ) / λ
-
-        - wavelength: in meters
-        - returns α in inverse meters (m⁻¹).
+        Loads absorption data from a CSV file and calculates the refractive index and absorption coefficient.
         """
-        # get extinction coefficient k from complex refractive index
-        cn = self.get_complex_n(wavelength_meters)
-        k_val = cn.imag
-        return 4 * np.pi * k_val / wavelength_meters
+        # Load the data from CSV file
+        self.df = pd.read_csv(self.filename, sep = "\t")
+        # sort the data by wavelength
+        self.df = self.df.sort_values(by='Wavelength [nm]')
+        
+        # remove NaN values
+        self.df = self.df.dropna()
+        
+        # the data should be smoothed a bit
+        self.df['Absorption Coef. [cm-1]'] = self.df['Absorption Coef. [cm-1]'].rolling(window=5).mean()
+        # self.df = self.df.dropna()
+        
+        
+        self.wl = self.df['Wavelength [nm]'].values * 1e-3  # Convert nm to µm
+        self.absorption_coef = self.df['Absorption Coef. [cm-1]'].values  # cm⁻¹
+        
+        self.refractive_index = np.zeros(len(self.wl))
+        self.excitation_coef = np.zeros(len(self.wl))
+        
+        # Calculate the refractive index and excting coefficient
+        
+        for i, wl in enumerate(self.wl):
+            self.refractive_index[i], self.excitation_coef[i] = complex_refractive_index(wl, self.absorption_coef[i], self.temperature)
+                
+        
+    def get_complex_index(self, wavelength_microns: float):
 
-    def __repr__(self) -> str:
-        return f"Material('{self._name}')"
-    
+
+        if self.name == "Air": return 1, 0
+
+        # for the given wavelength, if it doesn't exist in the array, interpolate the value:
+        # check if the wavelength is within the range of the data
+        if wavelength_microns < self.wl[0] or wavelength_microns > self.wl[-1]:
+            raise ValueError(f"Wavelength {wavelength_microns} microns is out of range ({self.wl[0]} - {self.wl[-1]} microns)")
+        
+        # find the nearest wavelength in the array
+        index = np.searchsorted(self.wl, wavelength_microns)
+        
+        # if the wavelength is exactly in the array, return the value
+        if self.wl[index] == wavelength_microns:
+            return self.refractive_index[index], self.excitation_coef[index]
+        
+        # if the wavelength is not in the array, interpolate the value
+        else:
+            if index == 0:
+                return self.refractive_index[0], self.excitation_coef[0]
+            elif index == len(self.wl):
+                return self.refractive_index[-1], self.excitation_coef[-1]
+            else:
+                # linear interpolation
+                wl1, wl2 = self.wl[index-1], self.wl[index]
+                n1, n2 = self.refractive_index[index-1], self.refractive_index[index]
+                k1, k2 = self.excitation_coef[index-1], self.excitation_coef[index]
+                
+                n = n1 + (n2 - n1) * (wavelength_microns - wl1) / (wl2 - wl1)
+                k = k1 + (k2 - k1) * (wavelength_microns - wl1) / (wl2 - wl1)
+                
+                return n, k
+            
+    def get_alpha(self, wavelength_microns):
+        
+        if self.name == "Air": return 0.0
+
+        # for the given wavelength, if it doesn't exist in the array, interpolate the value:
+        # check if the wavelength is within the range of the data
+        
+        if wavelength_microns < self.wl[0] or wavelength_microns > self.wl[-1]:
+            raise ValueError(f"Wavelength {wavelength_microns} microns is out of range ({self.wl[0]} - {self.wl[-1]} microns)")
+        # find the nearest wavelength in the array 
+        index = np.searchsorted(self.wl, wavelength_microns)
+        
+        # if the wavelength is exactly in the array, return the value
+        if self.wl[index] == wavelength_microns:
+            return self.absorption_coef[index]
+        
+        # if the wavelength is not in the array, interpolate the value
+        
+        else:
+            if index == 0:
+                return self.absorption_coef[0]
+            elif index == len(self.wl):
+                return self.absorption_coef[-1]
+            else:
+                # linear interpolation
+                wl1, wl2 = self.wl[index-1], self.wl[index]
+                alpha1, alpha2 = self.absorption_coef[index-1], self.absorption_coef[index]
+                
+                alpha = alpha1 + (alpha2 - alpha1) * (wavelength_microns - wl1) / (wl2 - wl1)
+                
+                return alpha
+            
+            
+    def make_tables(self, wls):
+        """
+        Create tables for refractive index and absorption coefficient.
+
+        Args:
+            wl_min (float): Minimum wavelength in microns.
+            wl_max (float): Maximum wavelength in microns.
+        """
+        # Create a new DataFrame with the specified wavelength range
+        self.n_table = np.zeros(len(wls))
+        self.k_table = np.zeros(len(wls))
+        self.a_table = np.zeros(len(wls))
+        
+        for i, wl in enumerate(wls):
+            n, k = self.get_complex_index(wl)
+            alpha = self.get_alpha(wl)
+            
+            self.n_table[i] = n
+            self.k_table[i] = k
+            self.a_table[i] = alpha
+            
+        print(self.n_table, self.a_table)
+            
+
+            

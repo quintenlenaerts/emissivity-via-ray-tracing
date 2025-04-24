@@ -118,7 +118,7 @@ class Interface:
         return s
 
 
-    def GetBorderByDirectionFromPoint(self, point : Vec2, angle : float = 90, scanning_height : float = 1000) -> int:
+    def GetBorderByDirectionFromPoint(self, point : Vec2, angle : float = 90, scanning_height : float = 50000) -> int:
         """
             Returns the index of the interfaceborder (_borders array) in a direction from the given point
 
@@ -152,10 +152,10 @@ class Interface:
         
         return record_index 
 
-    def GetTopBorder(self, point : Vec2, scanning_height : float = 1000) -> int:
+    def GetTopBorder(self, point : Vec2, scanning_height : float = 50000) -> int:
         return self.GetBorderByDirectionFromPoint(point, 90, scanning_height)
     
-    def GetBotBorder(self, point : Vec2, scanning_height : float = 1000) -> int:
+    def GetBotBorder(self, point : Vec2, scanning_height : float = 50000) -> int:
         return self.GetBorderByDirectionFromPoint(point, 270, scanning_height)
     
 
@@ -186,7 +186,7 @@ class Interface:
             # recalculate the rays for this mesh
             self._borders[x]._mesh_rays = None
 
-    def GetMaterial(self, point : Vec2, scanning_height : float = 1000) -> Material:
+    def GetMaterial(self, point : Vec2, scanning_height : float = 50000) -> Material:
         """
             Returns the material of the interface at the given point. Works by sending out 2 rays , 90° up and 90° down
             using the GetTopBorder and GetBotBorder functions.
@@ -213,7 +213,7 @@ class Interface:
     def TraceOneRay(self, start_pos : Vec2, direction : float, wavelength : float, temperature : float,
                     max_depth = 50, energy_treshhold = 0.01, debug=False) -> list[float]:
         """
-            Traces one ray throughtout the specified geometry.
+            Traces one ray throughtout the specified geometry. Wavelength in meters.
 
             Returns:
                 list: [sum of emitted spectral radiance contributions, final throughput]
@@ -254,11 +254,12 @@ class Interface:
             # if it goes through ==> calculate the new throughput/emitted radiance and such
             distance_m = Vec2.Distance(current_pos, LR_Col.col.point) * 1e-6 # in meters
             if distance_m > 1e-12:
-                alpha = LR_Col.mat_old.get_absorption_coefficient(wavelength)
-                attenuation = np.exp(-alpha * distance_m)
+                alpha = LR_Col.mat_old.get_alpha(wavelength * 1e6)
+                alpha_m = alpha * 1e2
+                attenuation = np.exp(-alpha_m * distance_m)
                 emissivity = 1.0 - attenuation
 
-                B_lambda_T = planck_lambda(wavelength, temperature)
+                B_lambda_T = planck_lambda(wavelength * 1e6, temperature)
                 emitted_radiance_segment = emissivity * B_lambda_T
                 
                 accumelated_radiance += ray_troughput * emitted_radiance_segment

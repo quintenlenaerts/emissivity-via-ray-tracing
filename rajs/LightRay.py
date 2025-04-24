@@ -43,11 +43,10 @@ class LightRayCollision:
 
         # 4) Ratio of refractive indices
 
-        cn1 = mat_old.get_complex_n(wavelength_meters)
-        cn2 = mat_new.get_complex_n(wavelength_meters)
+        n1, k1 = mat_old.get_complex_index(wavelength_meters * 1e6)
+        n2, k2 = mat_new.get_complex_index(wavelength_meters * 1e6)
         
-        n1 = np.real(cn1)
-        n2 = np.real(cn2)
+        
 
         eta = n1 / n2
 
@@ -73,7 +72,7 @@ class LightRayCollision:
         self.transmitted_angle = vector_to_angle(trans_vec)
 
         # 8 setting the fresnel coeffs
-        R,T = fresnel_coefs(cn1, cn2, cos_i)
+        R,T = fresnel_coefs(n1 + k1 * 1j, n2 + k2 * 1j, cos_i)
         self.reflected_coef = R
         # dont actually have to calculate T ==> can use Schlikreflectance approx
         self.transmitt_coef = T
@@ -186,7 +185,7 @@ class LightRay:
                 None is no border is hit (light ray outside material). LightRayCollsion object if a border is hit
         """
 
-        border_index : int = interface.GetBorderByDirectionFromPoint(self._ray.source_pos, self._angle, 2000)
+        border_index : int = interface.GetBorderByDirectionFromPoint(self._ray.source_pos, self._angle, 50000)
         if (border_index == None):
             return None
         

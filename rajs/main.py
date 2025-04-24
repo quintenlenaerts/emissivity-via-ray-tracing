@@ -11,12 +11,8 @@ from optics import planck_lambda
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 
-from graphx import GraphX
-
-# --- 1) Define single-layer geometry using your own Interface code ---
-# Layer width and thickness (in same units as Vec2 coords, e.g. microns)
 width     = 30000.0
-thickness = 500.0  # layer thickness
+thickness = 500.0
 
 # Create flat top and bottom borders
 InterfaceBorder.BorderType.SINE_SETTINGS(0.5, 2, 600)
@@ -27,24 +23,23 @@ int_top.move_right(-0.5 * width)
 int_bot = InterfaceBorder(InterfaceBorder.BorderType.LINE, width, "BottomBorder")
 int_bot.move_right(-0.5 * width)
 
-# Materials
-mat_olive = Material("Olive")
-mat_olive.ReadFromFile("NK/correct_olive.csv")
+temperature      = 800.0
 
+# Materials
+mat_olive = Material("Olive", "./lab-olive.csv", temperature)
 
 # Build Interface stack: Air above, Material in middle, Air below
 iface = Interface()
-iface.AddLayer(None,    int_top, Material("Air",   1.0, 0.0))
+iface.AddLayer(None,    int_top, Material("Air", "", temperature))
 iface.AddLayer(int_top, int_bot, mat_olive)  # set your n,k
-iface.AddLayer(int_bot, None,    Material("Air",   1.0, 0.0))
+iface.AddLayer(int_bot, None,    Material("Air",   "", temperature))
 iface.ConnectBorders()
 
-num_wavelengths = 2
+num_wavelengths = 12
 wavelengths      = np.linspace(0.3, 2.4, num_wavelengths)  # in microns
 wavelengths_meters = wavelengths * 1e-6
 
-N_rays_per_wl    = 100
-temperature      = 800.0
+N_rays_per_wl    = 200
 max_bounces      = 50
 
 def sim_wl(args):
@@ -67,7 +62,7 @@ def sim_wl(args):
 
 
 results_radiance = np.zeros_like(wavelengths)
-black_body_radiance = [planck_lambda(wl, temperature) for wl in wavelengths_meters]
+black_body_radiance = [planck_lambda(wl, temperature) for wl in wavelengths]
 
 
 if __name__ == "__main__":
