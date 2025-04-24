@@ -6,13 +6,16 @@ from Interface import InterfaceBorder, Interface
 from Material import Material
 from Vec2 import Vec2
 from LightRay import LightRay
-from optics import planck_spectral_radiance
+from optics import planck_lambda
+
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor
 
 from graphx import GraphX
 
 # --- 1) Define single-layer geometry using your own Interface code ---
 # Layer width and thickness (in same units as Vec2 coords, e.g. microns)
-width     = 600.0
+width     = 30000.0
 thickness = 500.0  # layer thickness
 
 # Create flat top and bottom borders
@@ -36,16 +39,56 @@ iface.AddLayer(int_top, int_bot, mat_olive)  # set your n,k
 iface.AddLayer(int_bot, None,    Material("Air",   1.0, 0.0))
 iface.ConnectBorders()
 
-wavelengths      = np.linspace(0.3, 2.4, 1)  # in microns
-wavelengths = np.array([2.4])
-N_rays_per_wl    = 10
-temperature      = 700.0
-max_bounces      = 10
+num_wavelengths = 2
+wavelengths      = np.linspace(0.3, 2.4, num_wavelengths)  # in microns
+wavelengths_meters = wavelengths * 1e-6
 
-start_pos = Vec2(0, 520)
-start_dir = 300
+N_rays_per_wl    = 100
+temperature      = 800.0
+max_bounces      = 50
+
+def sim_wl(args):
+    wavelength_meter, temp, _interface, x_min, x_max, y_min, y_max, N = args
+    s = 0.0 # the calc radiance
+    for _ in range(N):
+        # determine start pos
+        _x = np.random.uniform(x_min, x_max)
+        _y = np.random.uniform(y_min, y_max)
+
+        # random direction
+        _dir = np.random.uniform(0, 360)
+        
+        throughput, n_radiance = _interface.TraceOneRay(
+            Vec2(_x, _y), _dir, wavelength_meter, temp
+        )
+
+        s += n_radiance
+    return s/N
 
 
-for wl in wavelengths:
-    print(iface.TraceOneRay(start_pos, start_dir, wl * 1e-6, temperature, max_bounces, debug=True))
+results_radiance = np.zeros_like(wavelengths)
+black_body_radiance = [planck_lambda(wl, temperature) for wl in wavelengths_meters]
 
+
+if __name__ == "__main__":
+    print(f"Starting simulation: {num_wavelengths} wavelengths, {N_rays_per_wl} rays per wavelength...")
+
+    pool_args = [
+        (wl, temperature, iface, -width/2, width/2, 0, thickness, N_rays_per_wl)
+        for wl in wavelengths_meters
+    ]
+
+    with ProcessPoolExecutor(max_workers=6) as executor:
+        results_iter = executor.map(sim_wl, pool_args)
+        results_radiance = list(
+            tqdm(
+                results_iter,
+                total=len(pool_args),
+                desc="Simulating wavelengths",
+                unit="λ"
+            )
+        )
+    results_radiance = np.array(results_radiance)
+    emissivity = results_radiance / black_body_radiance
+
+    print(f"Emissivity: {emissivity}")

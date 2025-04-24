@@ -2,7 +2,7 @@ from Vec2 import Vec2
 from ray import Ray, RayCollision
 from Material import Material
 import numpy as np
-from optics import planck_spectral_radiance, fresnel_coefs
+from optics import planck_spectral_radiance, fresnel_coefs, schlick_reflectance
 
 def vector_to_angle(vec: Vec2) -> float:
     return np.degrees(np.arctan2(vec.y, vec.x)) % 360
@@ -75,11 +75,9 @@ class LightRayCollision:
         # 8 setting the fresnel coeffs
         R,T = fresnel_coefs(cn1, cn2, cos_i)
         self.reflected_coef = R
+        # dont actually have to calculate T ==> can use Schlikreflectance approx
         self.transmitt_coef = T
 
-        # really should not be seeing this message appear...
-        if R >= 1 or T >= 1:
-            print("R/T ; {}/{}".format(R,T))
 
 class LightRay:
 

@@ -4,7 +4,7 @@ from ray import Ray, RayCollision
 from LightRay import LightRay, LightRayCollision
 from Material import Material
 import numpy as np
-from optics import planck_spectral_radiance
+from optics import planck_lambda
 
 class InterfaceBorder:
 
@@ -246,7 +246,7 @@ class Interface:
 
             if LR_Col == None:
                 # no order is being hit
-                print("\nNo border being hit. Stopping.")
+                if debug: print("\nNo border being hit. Stopping.")
                 if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
                 if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
                 break
@@ -258,7 +258,7 @@ class Interface:
                 attenuation = np.exp(-alpha * distance_m)
                 emissivity = 1.0 - attenuation
 
-                B_lambda_T = planck_spectral_radiance(wavelength, temperature)
+                B_lambda_T = planck_lambda(wavelength, temperature)
                 emitted_radiance_segment = emissivity * B_lambda_T
                 
                 accumelated_radiance += ray_troughput * emitted_radiance_segment
@@ -269,19 +269,19 @@ class Interface:
             if np.random.random() < LR_Col.reflected_coef:
                 # reflect this 
                 current_direction = LR_Col.reflected_angle
-                print("\nReflecting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
+                if debug: print("\nReflecting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
                 if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
                 if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
             else:
                 current_direction = LR_Col.transmitted_angle
-                print("\nTransmitting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
+                if debug: print("\nTransmitting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
                 if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
                 if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
         
             if current_direction < 1e-9:
                 break
         
-        return accumelated_radiance, ray_troughput
+        return ray_troughput, accumelated_radiance
 
 
 

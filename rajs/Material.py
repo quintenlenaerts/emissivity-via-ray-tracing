@@ -42,7 +42,7 @@ class Material:
             raise ValueError(f"File '{filename}' must have at least three columns: wavelength, n, k")
 
         # parse columns
-        wl = data[:, 0] * 1e-6
+        wl = data[:, 0]
         n_vals = data[:, 1]
         k_vals = data[:, 2]
 
@@ -74,7 +74,9 @@ class Material:
         Raises:
             ValueError: if wavelength outside the loaded data range.
         """
-        wavelength = wavelength_meters
+        # convert to microns
+        wavelength = wavelength_meters * 1e6
+        
         # if data arrays present, use interpolation
         if self._wavelengths is not None:
             wl_arr = self._wavelengths

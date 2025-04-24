@@ -57,3 +57,37 @@ def fresnel_coefs(n1, n2, cos_i):
     T   = 0.5*(T_s + T_p)
 
     return R, T
+
+import math
+def planck_lambda(wl, T):
+    # wl: wavelength in meters, T: temperature in K
+    # Physical constants
+    c1 = 3.741771e-16  # W·m^2 (first radiation constant)
+    c2 = 1.438776e-2   # m·K   (second radiation constant)
+    lam_m = wl   # convert meters to meters
+    # Planck's law: spectral radiance per unit wavelength
+    return (c1 / (lam_m**5)) / (math.exp(c2 / (lam_m * T)) - 1.0)
+
+def schlick_reflectance(n1, n2, cos_i):
+    """
+    Calculates reflectance using Schlick's approximation for unpolarized light.
+
+    Args:
+        n1 (float): Refractive index of the incident medium.
+        n2 (float): Refractive index of the transmitting medium.
+        cos_i (float): Cosine of the angle of incidence (must be >= 0).
+
+    Returns:
+        float: Reflectance probability (0 to 1).
+    """
+    # Ensure cos_i is non-negative (angle between 0 and 90 degrees)
+    cos_i = max(0.0, cos_i)
+    # Calculate R0, the reflectance at normal incidence
+    r0_num = (n1 - n2)
+    r0_den = (n1 + n2)
+    if abs(r0_den) < 1e-12: # Avoid division by zero if indices are equal
+        r0 = 0.0
+    else:
+        r0 = (r0_num / r0_den)**2
+    # Schlick's approximation formula
+    return r0 + (1.0 - r0) * ((1.0 - cos_i)**5)
