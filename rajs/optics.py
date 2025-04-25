@@ -2,8 +2,6 @@ import numpy as np
 from scipy.constants import h, c, k as kB
 from numba import njit
 
-
-
 def planck_spectral_radiance(wavelength_metres: float, temperature: float) -> float:
     """
     B_λ(T) [W / (m²·sr·m)] for a black body at T.

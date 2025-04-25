@@ -52,6 +52,7 @@ class Mesh:
         for x in range(len(self.points) - 1):
             n_ray = Ray(self.points[x].x,self.points[x].y)
             n_ray.SetDirectionByPoint(self.points[x+1])
+            n_ray.ExtendFromSource(1e-3)
             _rays.append(n_ray)
         return _rays
 

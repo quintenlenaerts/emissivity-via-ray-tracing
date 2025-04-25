@@ -15,7 +15,7 @@ width     = 30000.0
 thickness = 500.0
 
 # Create flat top and bottom borders
-InterfaceBorder.BorderType.SINE_SETTINGS(0.5, 2, 600)
+InterfaceBorder.BorderType.SINE_SETTINGS(0, 2, 20000)
 int_top = InterfaceBorder(InterfaceBorder.BorderType.SINE, width, "TopBorder")
 int_top.move_up(thickness)
 int_top.move_right(-0.5 * width)
@@ -35,7 +35,7 @@ iface.AddLayer(int_top, int_bot, mat_olive)  # set your n,k
 iface.AddLayer(int_bot, None,    Material("Air",   "", temperature))
 iface.ConnectBorders()
 
-num_wavelengths = 12
+num_wavelengths = 1
 wavelengths      = np.linspace(0.3, 2.4, num_wavelengths)  # in microns
 wavelengths_meters = wavelengths * 1e-6
 
@@ -53,11 +53,14 @@ def sim_wl(args):
         # random direction
         _dir = np.random.uniform(0, 360)
         
-        throughput, n_radiance = _interface.TraceOneRay(
+        pos_history, throughput, n_radiance = _interface.TraceOneRay(
             Vec2(_x, _y), _dir, wavelength_meter, temp
         )
 
-        s += n_radiance
+
+
+        s += n_radiance 
+
     return s/N
 
 
@@ -87,3 +90,15 @@ if __name__ == "__main__":
     emissivity = results_radiance / black_body_radiance
 
     print(f"Emissivity: {emissivity}")
+
+
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(wavelengths, emissivity)
+    plt.xlabel("Wavelength (microns)")
+    plt.ylabel("Average Spectral Radiance (W / m^2 / sr / m)")
+    plt.title(f"Simulated Radiance Spectrum ({N_rays_per_wl} rays/wl)")
+    plt.grid(True, linestyle=':')
+    # plt.yscale('log')
+    plt.show()
+    

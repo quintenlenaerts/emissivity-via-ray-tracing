@@ -34,7 +34,7 @@ class InterfaceBorder:
         self._mesh = Mesh()
 
         if self._type == InterfaceBorder.BorderType.LINE:
-            self._mesh.generate_line(self._width, 1000)
+            self._mesh.generate_line(self._width, 10000)
         elif self._type == InterfaceBorder.BorderType.ZIGZAG:
             self._mesh.generate_seesaw(self._width, int(self._width), 0.3)
         elif self._type == InterfaceBorder.BorderType.SINE:
@@ -211,17 +211,19 @@ class Interface:
 
 
     def TraceOneRay(self, start_pos : Vec2, direction : float, wavelength : float, temperature : float,
-                    max_depth = 50, energy_treshhold = 0.01, debug=False) -> list[float]:
+                    max_depth = 50, energy_treshhold = 0.01, debug=False):
         """
             Traces one ray throughtout the specified geometry. Wavelength in meters.
 
             Returns:
-                list: [sum of emitted spectral radiance contributions, final throughput]
+                list: [list[Vec2] position history, sum of emitted spectral radiance contributions, final throughput]
         """
 
-        # creating:
+        # creating:        
         current_pos : Vec2 = start_pos
         current_direction : float = direction
+        pos_history = [current_pos]
+
 
         ray_troughput = 1.0 # will be used to determine when to stop
         accumelated_radiance = 0.0
@@ -236,7 +238,7 @@ class Interface:
                 if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
                 break
             
-            # initing the Lighray
+            # initing the Lightray
             LR = LightRay(current_pos, current_direction)
             LR.wavelength = wavelength
             LR.temperature = temperature
@@ -270,19 +272,29 @@ class Interface:
             if np.random.random() < LR_Col.reflected_coef:
                 # reflect this 
                 current_direction = LR_Col.reflected_angle
+
+                # ray_troughput /= LR_Col.reflected_coef
+
                 if debug: print("\nReflecting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
                 if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
                 if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
             else:
                 current_direction = LR_Col.transmitted_angle
+
+                # ray_troughput /= LR_Col.transmitt_coef
+
                 if debug: print("\nTransmitting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
                 if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
                 if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
         
-            if current_direction < 1e-9:
-                break
+
+
+            # if current_direction < 1e-9:
+            #     break
+
+            pos_history.append(current_pos)
         
-        return ray_troughput, accumelated_radiance
+        return pos_history, ray_troughput, accumelated_radiance
 
 
 

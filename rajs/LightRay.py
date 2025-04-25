@@ -46,8 +46,6 @@ class LightRayCollision:
         n1, k1 = mat_old.get_complex_index(wavelength_meters * 1e6)
         n2, k2 = mat_new.get_complex_index(wavelength_meters * 1e6)
         
-        
-
         eta = n1 / n2
 
         # 5) Compute cos(theta_i)
@@ -98,7 +96,7 @@ class LightRay:
         self.emitted_radiance = 0.0     # accumulated W/(m²·sr·m)
         
         self.wavelength : float = 0.9e-6
-        self.temperature : float = 300 # kelving
+        self.temperature : float = 300 # kelvin
 
     # def Send(self, interface : Interface):
     #     """

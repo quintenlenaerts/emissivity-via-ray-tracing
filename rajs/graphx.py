@@ -41,3 +41,12 @@ class GraphX:
     @staticmethod
     def draw_point(point : Vec2, marker = "o" , color ="red"):
         plt.plot(point.x, point.y, marker=marker, color=color)  
+
+    @staticmethod
+    def draw_pos_history(points : list[Vec2], ray_color='green', point_color='black'):
+        for x in range(len(points) - 1):
+            _r = Ray(points[x].x,points[x].y)
+            _r.SetDirectionByPoint(points[x+1])
+
+            GraphX.draw_ray(_r, ray_color)
+            GraphX.draw_point(points[x], "o", point_color)

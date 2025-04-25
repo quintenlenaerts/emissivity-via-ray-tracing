@@ -117,7 +117,7 @@ class Ray:
         py = ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / den
         intersection = Vec2(px, py)
 
-        def within_segment(p, a, b, tol=1e-8):
+        def within_segment(p, a, b, tol=1e-3):
             return min(a, b) - tol <= p <= max(a, b) + tol
 
         if (within_segment(px, x1, x2) and within_segment(py, y1, y2) and
