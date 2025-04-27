@@ -6,6 +6,9 @@ from Material import Material
 import numpy as np
 from optics import planck_lambda
 
+import trimesh
+from trimesh.ray.ray_pyembree import RayMeshIntersector
+
 class InterfaceBorder:
 
     class BorderType:
@@ -210,6 +213,101 @@ class Interface:
         return None
 
 
+    def build_trimesh(self, extrusion_height: float = 1e-6):
+        """
+        Extrude 2D borders into a 3D mesh, initialize Embree intersector,
+        and build a face-to-segment lookup for side-wall collisions.
+        """
+        self._extrusion_height = extrusion_height
+
+        # 1) Gather 2D points (µm → m) and segments
+        verts = []
+        segments = []       # list of (v0_idx, v1_idx)
+        segment_border = [] # border index per segment
+        offset = 0
+        for bi, border in enumerate(self._borders):
+            pts = border._mesh.points
+            for p in pts:
+                verts.append([p.x * 1e-6, p.y * 1e-6])
+            for i in range(len(pts)-1):
+                segments.append((offset + i, offset + i + 1))
+                segment_border.append(bi)
+            offset += len(pts)
+
+        self._tm_verts = np.array(verts)
+        self._tm_segments = np.array(segments, dtype=int)
+        self._tm_seg_border = np.array(segment_border, dtype=int)
+
+        # 2) Build and extrude 2D path
+        path2d = trimesh.path.Path2D(
+            entities=[trimesh.path.entities.Line(list(seg)) for seg in self._tm_segments],
+            vertices=self._tm_verts
+        )
+        mesh3d = path2d.extrude(extrusion_height)
+        self._trimesh = mesh3d
+        self._intersector = RayMeshIntersector(mesh3d)
+
+        # # 3) Map each side-face to its segment
+        # normals = mesh3d.face_normals
+        # side_faces = np.where(np.abs(normals[:,2]) < 1e-6)[0]
+        # # Build vertex→segments map
+        # num_verts2d = len(self._tm_verts)
+        # vert_to_segs = {vi: [] for vi in range(num_verts2d)}
+        # for si, (v0i, v1i) in enumerate(self._tm_segments):
+        #     vert_to_segs[v0i].append(si)
+        #     vert_to_segs[v1i].append(si)
+
+        # face_to_seg = {}
+        # for face in side_faces:
+        #     tri = mesh3d.faces[face]
+        #     bottom = [vi for vi in tri if vi < num_verts2d]
+        #     if len(bottom) != 2:
+        #         continue
+        #     common = set(vert_to_segs[bottom[0]]) & set(vert_to_segs[bottom[1]])
+        #     if len(common) == 1:
+        #         face_to_seg[int(face)] = common.pop()
+        # self._tm_face_to_seg = face_to_seg
+        # 3) Map each side-face to its 2D segment
+        # 3) Map each side-face to its 2D segment (now catches both triangles)
+        normals    = mesh3d.face_normals
+        side_faces = np.where(np.abs(normals[:,2]) < 1e-6)[0]
+
+        # build a lookup: sorted-(v0,v1) → segment index
+        num2        = len(self._tm_verts)
+        segment_map = {
+            tuple(sorted(pair)): si
+            for si, pair in enumerate(self._tm_segments)
+        }
+
+        face_to_seg = {}
+        for fidx in side_faces:
+            tri = mesh3d.faces[fidx]
+            # reduce every vertex index mod num2 so top‐ring verts wrap
+            mids = [int(v % num2) for v in tri]
+
+            # check each edge of the triangle
+            for i,j in ((0,1),(0,2),(1,2)):
+                key = tuple(sorted((mids[i], mids[j])))
+                if key in segment_map:
+                    face_to_seg[int(fidx)] = segment_map[key]
+                    break
+
+        self._tm_face_to_seg = face_to_seg
+
+
+
+        # 4) Precompute surface rays for each segment (µm coords)
+        self._tm_surface_rays = []
+        for v0i, v1i in self._tm_segments:
+            v0 = self._tm_verts[v0i] * 1e6
+            v1 = self._tm_verts[v1i] * 1e6
+            p0 = Vec2(v0[0], v0[1])
+            ray = Ray(p0.x, p0.y)
+            ray.SetDirectionByPoint(Vec2(v1[0], v1[1]))
+            self._tm_surface_rays.append(ray)
+
+
+
     def TraceOneRay(self, start_pos : Vec2, direction : float, wavelength : float, temperature : float,
                     max_depth = 50, energy_treshhold = 0.01, debug=False):
         """
@@ -270,6 +368,7 @@ class Interface:
             # setting new varabiales
             current_pos = LR_Col.col.point
             if np.random.random() < LR_Col.reflected_coef:
+            # if True:
                 # reflect this 
                 current_direction = LR_Col.reflected_angle
 

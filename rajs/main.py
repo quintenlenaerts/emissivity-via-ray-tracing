@@ -15,7 +15,7 @@ width     = 30000.0
 thickness = 500.0
 
 # Create flat top and bottom borders
-InterfaceBorder.BorderType.SINE_SETTINGS(0, 2, 20000)
+InterfaceBorder.BorderType.SINE_SETTINGS(0.05, 0.5, 20000)
 int_top = InterfaceBorder(InterfaceBorder.BorderType.SINE, width, "TopBorder")
 int_top.move_up(thickness)
 int_top.move_right(-0.5 * width)
@@ -27,19 +27,22 @@ temperature      = 800.0
 
 # Materials
 mat_olive = Material("Olive", "./lab-olive.csv", temperature)
+mat_air = Material("Air", "", temperature, Material.MateterialTypes.SINGLE_NK)
+mat_air.set_single_nk(1, 0)
 
 # Build Interface stack: Air above, Material in middle, Air below
 iface = Interface()
-iface.AddLayer(None,    int_top, Material("Air", "", temperature))
+iface.AddLayer(None,    int_top, mat_air)
 iface.AddLayer(int_top, int_bot, mat_olive)  # set your n,k
-iface.AddLayer(int_bot, None,    Material("Air",   "", temperature))
+iface.AddLayer(int_bot, None,    mat_air)
 iface.ConnectBorders()
+iface.build_trimesh()
 
-num_wavelengths = 1
+num_wavelengths = 180
 wavelengths      = np.linspace(0.3, 2.4, num_wavelengths)  # in microns
 wavelengths_meters = wavelengths * 1e-6
 
-N_rays_per_wl    = 200
+N_rays_per_wl    = 5000
 max_bounces      = 50
 
 def sim_wl(args):

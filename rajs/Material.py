@@ -10,13 +10,19 @@ class Material:
 #     - absorption: [float, float]
 #  it will load the absorption data from a csv file and use core_optical_functions to calculate the refractive index and excting coefficient to be used in the simulation
 
-    def __init__(self, name: str, filename : str, temperature: float = 293.15):
+    class MateterialTypes:
+        ABSORPTION_DATA = 0
+        SINGLE_NK = 1
+
+    def __init__(self, name: str, filename : str, temperature: float = 293.15, material_type=MateterialTypes.ABSORPTION_DATA):
         """
         Initializes the Material class with a name and a filename for absorption data.
 
         Args:
             name (str): The name of the material.
             filename (str): The path to the CSV file containing absorption data.
+            Mateterial_type (int): Material.MaterialTypes.[ABSORPTION DATA / SINGLE NK]
+                Have to call .set_single_nk() 
         """
         self.name = name
         self.filename = filename
@@ -28,8 +34,13 @@ class Material:
         self.refractive_index = None
         self.exciting_coef = None
 
-        if (self.name != "Air"):
+        self.material_type = material_type
+        if (material_type == Material.MateterialTypes.ABSORPTION_DATA):
             self.load_absorption_data()
+        
+        # single complex index of refraction; used only when materialtype.single nk is used
+        self.single_n = None
+        self.single_k = None
         
         
     def load_absorption_data(self):
@@ -59,12 +70,17 @@ class Material:
         
         for i, wl in enumerate(self.wl):
             self.refractive_index[i], self.excitation_coef[i] = complex_refractive_index(wl, self.absorption_coef[i], self.temperature)
-                
+    
+    def set_single_nk(self, n_value : float, k_value : float):
+        self.single_n = n_value
+        self.single_k = k_value
         
     def get_complex_index(self, wavelength_microns: float):
 
-
-        if self.name == "Air": return 1, 0
+        if self.material_type == Material.MateterialTypes.SINGLE_NK:
+            if self.single_k == None or self.single_n == None:
+                print("Single NK of material : " + self.name + " not yet set.")
+            return self.single_n, self.single_k
 
         # for the given wavelength, if it doesn't exist in the array, interpolate the value:
         # check if the wavelength is within the range of the data
@@ -96,8 +112,12 @@ class Material:
                 return n, k
             
     def get_alpha(self, wavelength_microns):
+        """
+            Returns alpha in cm^-1
+        """
         
-        if self.name == "Air": return 0.0
+        if self.material_type == Material.MateterialTypes.SINGLE_NK:
+            return 1e4 *  4 * np.pi * self.single_k / wavelength_microns
 
         # for the given wavelength, if it doesn't exist in the array, interpolate the value:
         # check if the wavelength is within the range of the data
