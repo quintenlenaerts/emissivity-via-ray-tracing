@@ -24,9 +24,9 @@ class InterfaceBorder:
         _sine_freq = 2
         _sine_points = 100
 
-        _perlin_amp = 1
-        _perlin_freq = 100
-        _perlin_points = 10000
+        _perlin_amp = 10
+        _perlin_freq = 7
+        _perlin_points = 5000
 
         _file_path = ""
 
