@@ -2,7 +2,7 @@ from Vec2 import Vec2
 from ray import Ray
 import numpy as np
 
-
+from perlin_noise import PerlinNoise
 class Mesh:
 
     def __init__(self):
@@ -29,6 +29,22 @@ class Mesh:
 
         for x in range(point_amount):
             self.points.append(Vec2(step_size * x, amplitude * np.sin(step_size * x * freq) ))
+    
+    def generate_perlin_noise(self, line_width : float, amplitude : float = 1, freq : float = 100, point_amount = 100):
+    
+        # self.points = [amplitude * noise1d([scale*x]) for x in line_width]
+    
+        self.points = [] 
+        noise1d = PerlinNoise(octaves=96, seed=42)
+
+        step_size = line_width/(point_amount-1)
+        for i in range(point_amount):
+            _x = i * step_size
+
+            t = i / (point_amount - 1)
+
+            _y = amplitude * noise1d([t*freq])
+            self.points.append(Vec2(_x,_y))
 
     def __str__(self):
         s = "Mesh["

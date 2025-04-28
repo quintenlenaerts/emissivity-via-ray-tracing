@@ -9,6 +9,8 @@ from optics import planck_lambda
 import trimesh
 from trimesh.ray.ray_pyembree import RayMeshIntersector
 
+import pandas as pd
+
 class InterfaceBorder:
 
     class BorderType:
@@ -16,17 +18,33 @@ class InterfaceBorder:
         PERLIN = 1
         ZIGZAG = 2
         SINE = 3
+        FROMFILE = 4
 
         _sine_amp = 0.3
         _sine_freq = 2
         _sine_points = 100
 
+        _perlin_amp = 1
+        _perlin_freq = 100
+        _perlin_points = 10000
+
+        _file_path = ""
+
+        @staticmethod
+        def PERLIN_SETTINGS(amp : float, freq : float, points : int = 100):
+            InterfaceBorder.BorderType._perlin_amp = amp
+            InterfaceBorder.BorderType._perlin_freq = freq
+            InterfaceBorder.BorderType._perlin_points = points
+            
         @staticmethod
         def SINE_SETTINGS(amplitude : float, frequency : float, points : int=100):
             InterfaceBorder.BorderType._sine_amp = amplitude
             InterfaceBorder.BorderType._sine_freq = frequency
             InterfaceBorder.BorderType._sine_points = points
 
+        @staticmethod
+        def FILE_SETTINGS(filepath : str):
+            InterfaceBorder.BorderType._file_path = filepath
 
 
     def __init__(self, border_type : int, border_width : float, border_name : str = "default_border"):
@@ -46,8 +64,26 @@ class InterfaceBorder:
                 InterfaceBorder.BorderType._sine_freq,
                 InterfaceBorder.BorderType._sine_amp,
                 InterfaceBorder.BorderType._sine_points)
-        
+        elif self._type == InterfaceBorder.BorderType.PERLIN:
+            self._mesh.generate_perlin_noise(
+                self._width,
+                InterfaceBorder.BorderType._perlin_amp,
+                InterfaceBorder.BorderType._perlin_freq,
+                InterfaceBorder.BorderType._perlin_points)
+        elif self._type == InterfaceBorder.BorderType.FROMFILE:
+            # border_arg is a CSV filepath: first two columns are x and y in microns
+            if InterfaceBorder.BorderType._file_path == "":
+                ValueError("File path not specified in BorderType.FromFile")
+            df = pd.read_csv(InterfaceBorder.BorderType._file_path)
+            xs = df.iloc[:, 0].values
+            ys = df.iloc[:, 1].values
+            # build mesh from file data
+            self._mesh.points = [Vec2(x, y) for x, y in zip(xs, ys)]
 
+            # for v in self._mesh.points:
+            #     print(v)
+                
+                        
         self._mesh_rays : list[Ray] = None
     
     def move_up(self, height):
@@ -247,28 +283,6 @@ class Interface:
         self._trimesh = mesh3d
         self._intersector = RayMeshIntersector(mesh3d)
 
-        # # 3) Map each side-face to its segment
-        # normals = mesh3d.face_normals
-        # side_faces = np.where(np.abs(normals[:,2]) < 1e-6)[0]
-        # # Build vertex→segments map
-        # num_verts2d = len(self._tm_verts)
-        # vert_to_segs = {vi: [] for vi in range(num_verts2d)}
-        # for si, (v0i, v1i) in enumerate(self._tm_segments):
-        #     vert_to_segs[v0i].append(si)
-        #     vert_to_segs[v1i].append(si)
-
-        # face_to_seg = {}
-        # for face in side_faces:
-        #     tri = mesh3d.faces[face]
-        #     bottom = [vi for vi in tri if vi < num_verts2d]
-        #     if len(bottom) != 2:
-        #         continue
-        #     common = set(vert_to_segs[bottom[0]]) & set(vert_to_segs[bottom[1]])
-        #     if len(common) == 1:
-        #         face_to_seg[int(face)] = common.pop()
-        # self._tm_face_to_seg = face_to_seg
-        # 3) Map each side-face to its 2D segment
-        # 3) Map each side-face to its 2D segment (now catches both triangles)
         normals    = mesh3d.face_normals
         side_faces = np.where(np.abs(normals[:,2]) < 1e-6)[0]
 
@@ -309,9 +323,15 @@ class Interface:
 
 
     def TraceOneRay(self, start_pos : Vec2, direction : float, wavelength : float, temperature : float,
-                    max_depth = 50, energy_treshhold = 0.01, debug=False):
+                    max_depth = 50, energy_treshhold = 0.01, lr_col_point_offset : float = 1e-5, debug=False):
         """
             Traces one ray throughtout the specified geometry. Wavelength in meters.
+
+            Args:
+                ...
+                lr_col_point_offset (float) : In order to prevent self collisions we displace
+                    every new light ray by this amount, in their repsective directions. At the interfaces
+                    changes in this value might correspond to certain interactions/collision not regestring.
 
             Returns:
                 list: [list[Vec2] position history, sum of emitted spectral radiance contributions, final throughput]
@@ -342,7 +362,7 @@ class Interface:
             LR.temperature = temperature
 
             # colliding with the interface
-            LR_Col = LR._send(self)
+            LR_Col = LR._send(self, lr_col_point_offset)
 
             if LR_Col == None:
                 # no order is being hit

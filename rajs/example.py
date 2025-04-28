@@ -20,15 +20,17 @@ GraphX.grid_on()
 
 # interface setup
 # =================================
-InterfaceBorder.BorderType.SINE_SETTINGS(11, 8, 500)                         # generating a sine border
-int_top = InterfaceBorder(InterfaceBorder.BorderType.SINE, width, "TopBorder") # creating the actual border
+# InterfaceBorder.BorderType.SINE_SETTINGS(11, 8, 500)                         # generating a sine border
+# InterfaceBorder.BorderType.FILE_SETTINGS("interface1_profile.csv")
+int_top = InterfaceBorder(InterfaceBorder.BorderType.PERLIN, width, "TopBorder") # creating the actual border
 int_top.move_up(thickness_top_layer + thickness_bottom_layer)               # correct height
 int_top.move_right(-width/2)                                                # align properly
 
-InterfaceBorder.BorderType.SINE_SETTINGS(0.8, 4, 500)
-int_middle = InterfaceBorder(InterfaceBorder.BorderType.SINE, width, "MiddleBorder")
-int_middle.move_up(thickness_bottom_layer)
-int_middle.move_right(-width/2)
+# InterfaceBorder.BorderType.SINE_SETTINGS(0.8, 4, 500)
+InterfaceBorder.BorderType.FILE_SETTINGS("interface1_profile.csv")
+int_middle = InterfaceBorder(InterfaceBorder.BorderType.FROMFILE, width, "MiddleBorder")
+# int_middle.move_up(thickness_bottom_layer)
+# int_middle.move_right(-width/2)
 
 InterfaceBorder.BorderType.SINE_SETTINGS(0.3, 5, 500)
 int_bot = InterfaceBorder(InterfaceBorder.BorderType.SINE, width, "BottomBorder")
