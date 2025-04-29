@@ -14,7 +14,7 @@ from concurrent.futures import ProcessPoolExecutor
 # from graphx import GraphX
 
 width     = 30000.0
-thickness = 500.0
+thickness = 50.0
 
 # Create flat top and bottom borders
 # InterfaceBorder.BorderType.SINE_SETTINGS(10, 0.5, 20000)
@@ -45,18 +45,17 @@ iface.AddLayer(int_bot, None,    mat_air)
 iface.ConnectBorders()
 iface.build_trimesh()
 
-num_wavelengths = 50
+num_wavelengths = 200
 wavelengths      = np.linspace(0.3, 2.4, num_wavelengths)  # in microns
 wavelengths_meters = wavelengths * 1e-6
 
-N_rays_per_wl    = 2000
+N_rays_per_wl    = 5000
 max_bounces      = 50
 
 # GraphX.set_size(-width/2*1.05, width/2*1.05, 0, thickness*1.05)
 # GraphX.draw_interface_border(int_top, 'red')
 # GraphX.draw_interface_border(int_bot, 'red')
 # GraphX.draw_interface_border(temp_border, 'black')
-
 
 def sim_wl(args):
     wavelength_meter, temp, _interface, x_min, x_max, y_min, y_max, N = args
@@ -103,22 +102,30 @@ if __name__ == "__main__":
     results_radiance = np.array(results_radiance)
     emissivity = results_radiance / black_body_radiance
 
-    emis_analytic = []
-    for wl in wavelengths:
-        alpha_cm = mat_olive.get_alpha(wl)    # cm⁻¹
-        alpha_m  = alpha_cm*1e2               # m⁻¹
-        L        = thickness*1e-6             # interface thickness in m (500 µm → 5e-4 m)
-        eps_analytic = 1 - np.exp(-alpha_m * L)
-        emis_analytic.append(eps_analytic)
+    # emis_analytic = []
+    # for wl in wavelengths:
+    #     alpha_cm = mat_olive.get_alpha(wl)    # cm⁻¹
+    #     alpha_m  = alpha_cm*1e2               # m⁻¹
+    #     L        = thickness*1e-6             # interface thickness in m (500 µm → 5e-4 m)
+    #     eps_analytic = 1 - np.exp(-alpha_m * L)
+    #     emis_analytic.append(eps_analytic)
 
 
     print(f"Emissivity: {emissivity}")
+    import pandas as pd
+    results_df = pd.DataFrame({
+        'Wavelength (microns)': wavelengths,
+        'Average Spectral Radiance (W/m^2/sr/m)': results_radiance,
+        'Black Body Radiance (W/m^2/sr/m)': black_body_radiance,
+        'Emissivity': emissivity
+    })
+    results_df.to_csv("{}microns-lab-olive-{}wls-{}raysperwl.csv".format(round(thickness),num_wavelengths, N_rays_per_wl), index=False, sep = "\t")
 
     # GraphX.show()
 
     plt.figure(figsize=(10, 6))
     plt.plot(wavelengths, emissivity, label="Emis")
-    plt.plot(wavelengths, emis_analytic, label="Emis Analytic")
+    # plt.plot(wavelengths, emis_analytic, label="Emis Analytic")
     plt.legend()
     plt.xlabel("Wavelength (microns)")
     # plt.ylabel("Average Spectral Radiance (W / m^2 / sr / m)")

@@ -2,6 +2,8 @@ import numpy as np
 from scipy.constants import h, c, k as kB
 from numba import njit
 
+
+@njit(cache=True)
 def planck_spectral_radiance(wavelength_metres: float, temperature: float) -> float:
     """
     B_λ(T) [W / (m²·sr·m)] for a black body at T.
@@ -11,6 +13,8 @@ def planck_spectral_radiance(wavelength_metres: float, temperature: float) -> fl
 
     return (2*h*c**2) / (lam**5 * (np.exp(h*c/(lam*kB*temperature)) - 1.0))
 
+
+@njit(cache=True)
 def fresnel_coefs(n1, n2, cos_i):
     """
     Complex-n Fresnel for unpolarized light:
@@ -18,8 +22,11 @@ def fresnel_coefs(n1, n2, cos_i):
       cos_i:  cosine of incidence angle (real, ≥0)
     Returns real power reflectance R and transmittance T.
     """
-    # clamp cos_i
-    cos_i = np.clip(cos_i, 0.0, 1.0)
+    # clamp cos_i    
+    if cos_i < 0.0:
+        cos_i = 0.0
+    elif cos_i > 1.0:
+        cos_i = 1.0
     sin_i2 = 1.0 - cos_i*cos_i
 
     # ratio of indices
@@ -54,6 +61,8 @@ def fresnel_coefs(n1, n2, cos_i):
     return R, T
 
 import math
+
+@njit(cache=True)
 def planck_lambda(wl, T):
     """
         wl in microns
@@ -66,6 +75,7 @@ def planck_lambda(wl, T):
     # Planck's law: spectral radiance per unit wavelength
     return (c1 / (lam_m**5)) / (math.exp(c2 / (lam_m * T)) - 1.0)
 
+@njit(cache=True)
 def schlick_reflectance(n1, n2, cos_i):
     """
     Calculates reflectance using Schlick's approximation for unpolarized light.
@@ -163,6 +173,7 @@ def diamond_base_refractive_index_temperature(wavelength_microns: float, tempera
 
 
 
+@njit(cache=True)
 def absorption_to_k(wavelength_microns: float, absorption_coeff: float) -> float:
     """
     Convert absorption coefficient to imaginary part of refractive index.
@@ -178,6 +189,7 @@ def absorption_to_k(wavelength_microns: float, absorption_coeff: float) -> float
     # α in cm⁻¹, λ in cm
     return absorption_coeff * (wavelength_microns * 1e-4) / (4 * np.pi)
 
+@njit(cache=True)
 def complex_refractive_index(wavelength_microns: float, absorption: float, temperature = None) -> tuple[float, float]:
     """
     Calculate complex refractive index for doped diamond.
