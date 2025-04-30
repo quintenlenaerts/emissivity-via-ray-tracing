@@ -15,7 +15,7 @@ def planck_spectral_radiance(wavelength_metres: float, temperature: float) -> fl
 
 
 @njit(cache=True)
-def fresnel_coefs(n1, n2, cos_i):
+def fresnel_coefs_full(n1, n2, cos_i):
     """
     Complex-n Fresnel for unpolarized light:
       n1, n2: complex refractive indices (n + k)
@@ -58,7 +58,13 @@ def fresnel_coefs(n1, n2, cos_i):
     T_p = factor * np.abs(tp)**2
     T   = 0.5*(T_s + T_p)
 
-    return R, T
+    return R, T, rs, ts, rp, tp
+
+
+@njit(cache=True)
+def fresnel_coefs(n1, n2, cos_i):
+    R, T, _, _, _, _ = fresnel_coefs_full(n1, n2, cos_i)
+    return R,T
 
 import math
 

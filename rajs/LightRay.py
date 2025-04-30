@@ -2,7 +2,7 @@ from Vec2 import Vec2
 from ray import Ray, RayCollision
 from Material import Material
 import numpy as np
-from optics import planck_spectral_radiance, fresnel_coefs, schlick_reflectance
+from optics import planck_spectral_radiance, fresnel_coefs_full, schlick_reflectance
 from numba import njit
 
 def vector_to_angle(vec: Vec2) -> float:
@@ -87,9 +87,9 @@ def optimized_lrcol(
     # --- Fresnel coefficients ---
     c_old = n1 + k1 * 1j
     c_new = n2 + k2 * 1j
-    R, T = fresnel_coefs(c_old, c_new, cos_i)
+    R, T, rs, ts, rp, tp = fresnel_coefs_full(c_old, c_new, cos_i)
 
-    return ref_ang, trans_ang, R, T
+    return ref_ang, trans_ang, R, T, rs, rp, ts, tp
 
 class LightRayCollision:
     def __init__(self, collision: RayCollision, incoming_ray: Ray, surface_ray: Ray,
@@ -104,7 +104,7 @@ class LightRayCollision:
 
         # single Numba call replaces all unit‐vector, reflection, transmission
         # calculations + Fresnel:
-        refl_ang, trans_ang, R, T = optimized_lrcol(
+        refl_ang, trans_ang, R, T, rs, rp, ts, tp = optimized_lrcol(
             # incoming ray source & end (µm)
             incoming_ray.source_pos.x,
             incoming_ray.source_pos.y,
@@ -124,6 +124,12 @@ class LightRayCollision:
         self.transmitted_angle = trans_ang
         self.reflected_coef    = R
         self.transmitt_coef    = T
+
+        self.rs_amp = rs
+        self.rp_amp = rp
+
+        self.ts_amp = ts
+        self.tp_amp = tp
 
         # # --- 1) compute the incident unit‐vector in 2D ---
         # in_vec = incoming_ray.end_pos - incoming_ray.source_pos

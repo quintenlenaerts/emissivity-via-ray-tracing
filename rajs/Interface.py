@@ -7,7 +7,15 @@ import numpy as np
 from optics import planck_lambda
 
 import trimesh
-from trimesh.ray.ray_pyembree import RayMeshIntersector
+
+try:
+    # fastest if it works
+    from trimesh.ray.ray_pyembree import RayMeshIntersector
+except Exception:
+    # fallback on pure-Python method
+    from trimesh.ray.ray_triangle import RayMeshIntersector
+
+# from trimesh.ray.ray_pyembree import RayMeshIntersector
 
 import pandas as pd
 
@@ -416,5 +424,193 @@ class Interface:
         return pos_history, ray_troughput, accumelated_radiance
 
 
+    def TraceOneRayWithPhase(self,
+                    start_pos: Vec2,
+                    direction: float,
+                    wavelength: float,
+                    temperature: float,
+                    max_depth: int = 50,
+                    lr_col_point_offset: float = 1e-5,
+                    debug: bool = False
+                   ) -> tuple[complex, float]:
+        """
+        Trace one ray coherently _and_ track its power for emission.
+
+        Returns:
+          E_out          complex field amplitude exiting back toward source
+          accum_emission float  total emitted radiance along path (W/m^2·sr·m)
+        """
+
+        # --- initialize bookkeeping ---
+        ph            = 1 + 0j     # complex amplitude (unit phasor)
+        τ             = 1.0        # power throughput
+        E_out         = 0 + 0j     # will collect reflected phasors
+        accum_emission = 0.0       # your old emission accumulator
+
+        current_pos   = start_pos
+        current_dir   = direction
+
+        for bounce in range(max_depth):
+
+            if τ < 0.01:
+                break
+
+            # --- 1) shoot forward to find the next interface collision ---
+            LR = LightRay(current_pos, current_dir)
+            LR.wavelength  = wavelength
+            LR.temperature = temperature
+            lrcol = LR._send(self, lr_col_point_offset)
+            if lrcol is None:
+                # no more interfaces ahead → ray escapes
+                break
+
+            # --- 2) propagation in old medium over distance L (meters) ---
+            col_pt = lrcol.col.point
+            L       = Vec2.Distance(current_pos, col_pt) * 1e-6
+            # get index & absorption
+            n_old, _  = lrcol.mat_old.get_complex_index(wavelength * 1e6)
+            alpha_cm1 = lrcol.mat_old.get_alpha(wavelength * 1e6)  # cm⁻¹
+            alpha_m   = alpha_cm1 * 1e2                             # → m⁻¹
+            A         = np.exp(-alpha_m * L)       # power attenuation
+            amp_att   = np.sqrt(A)                # amplitude attenuation
+            k_old     = 2 * np.pi * n_old / wavelength
+
+            # --- 3) update phasor & throughput ---
+            ph   *= amp_att * np.exp(1j * k_old * L)
+            τ    *= A
+
+            # --- 4) accumulate _emitted_ radiance in this segment ---
+            #     emissivity = 1 − A
+            ε_seg = 1.0 - A
+            Bλ     = planck_lambda(wavelength * 1e6, temperature)
+            accum_emission += τ * Bλ * ε_seg
+
+            r_ampl = 0.5 * (lrcol.rp_amp + lrcol.rs_amp)
+            t_ampl = 0.5 * (lrcol.tp_amp + lrcol.ts_amp)
+            
+            # --- 5) Monte-Carlo Fresnel bounce (power-based choice) ---
+            #    and apply _amplitude_ coefficients for coherence
+            if np.random.random() < lrcol.reflected_coef:
+                # reflect back toward source
+                ph    *= r_ampl
+                # τ     *= lrcol.reflected_coef
+                E_out += ph
+                current_pos = col_pt
+                current_dir = lrcol.reflected_angle
+                
+            else:
+                # transmit into next layer
+                ph  *= t_ampl
+                # τ   *= lrcol.transmitt_coef
+                # advance origin & direction
+                current_pos = col_pt
+                current_dir = lrcol.transmitted_angle
+
+        return E_out, accum_emission
+
+    # def TraceOneRayWithPhase(self, start_pos : Vec2, direction : float, wavelength : float, temperature : float,
+    #                 max_depth = 50, lr_col_point_offset : float = 1e-5, debug=False):
+    #     """
+    #         Traces one ray throughtout the specified geometry. Wavelength in meters.
+
+    #         Args:
+    #             ...
+    #             lr_col_point_offset (float) : In order to prevent self collisions we displace
+    #                 every new light ray by this amount, in their repsective directions. At the interfaces
+    #                 changes in this value might correspond to certain interactions/collision not regestring.
+
+    #         Returns:
+    #             list: [list[Vec2] position history, sum of emitted spectral radiance contributions, final throughput]
+    #     """
+
+    #     # creating:        
+    #     current_pos : Vec2 = start_pos
+    #     current_direction : float = direction
+
+    #     # pos_history = [current_pos]
 
 
+    #     # ray_troughput = 1.0 # will be used to determine when to stop
+    #     # accumelated_radiance = 0.0
+
+    #     ph = 1 + 0j # starting with unit amplitude
+    #     E_out = 0 + 0j
+        
+
+    #     for bounce in range(max_depth):
+
+    #         # should we continue with this ray?
+    #         # if ray_troughput < energy_treshhold:
+    #         #     if debug: print("\nRay energy below the treshold.")
+    #         #     if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+    #         #     if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+    #         #     break
+            
+    #         # initing the Lightray
+    #         LR = LightRay(current_pos, current_direction)
+    #         LR.wavelength = wavelength
+    #         LR.temperature = temperature
+
+    #         # colliding with the interface
+    #         LR_Col = LR._send(self, lr_col_point_offset)
+
+    #         if LR_Col == None:
+    #             # no order is being hit
+    #             # if debug: print("\nNo border being hit. Stopping.")
+    #             # if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+    #             # if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+    #             break
+
+    #         # if it goes through ==> calculate the new throughput/emitted radiance and such
+    #         distance_m = Vec2.Distance(current_pos, LR_Col.col.point) * 1e-6 # in meters
+
+    #         if distance_m > 1e-12:
+    #             n_old, _ = LR_Col.mat_old.get_complex_index(wavelength * 1e6)
+    #             ph *= np.exp(1j * 2 * np.pi * n_old * distance_m / wavelength)
+
+    #         # if distance_m > 1e-12:
+    #         #     alpha = LR_Col.mat_old.get_alpha(wavelength * 1e6)
+    #         #     alpha_m = alpha * 1e2
+    #         #     attenuation = np.exp(-alpha_m * distance_m)
+    #         #     emissivity = 1.0 - attenuation
+
+    #         #     B_lambda_T = planck_lambda(wavelength * 1e6, temperature)
+    #         #     emitted_radiance_segment = emissivity * B_lambda_T
+                
+    #         #     accumelated_radiance += ray_troughput * emitted_radiance_segment
+    #         #     ray_troughput *= attenuation
+            
+    #         # setting new varabiales
+    #         # current_pos = LR_Col.col.point
+    #         if np.random.random() < LR_Col.reflected_coef:
+    #         # if True:
+    #             # reflect this 
+    #             # current_direction = LR_Col.reflected_angle
+    #             ph *= 0.5 * (LR_Col.rs_amp + LR_Col.rp_amp)
+    #             E_out += ph
+    #             break
+    #             # ray_troughput /= LR_Col.reflected_coef
+
+    #             # if debug: print("\nReflecting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
+    #             # if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+    #             # if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+    #         else:
+    #             current_direction = LR_Col.transmitted_angle
+    #             current_pos = LR_Col.col.point
+
+    #             ph *= 0.5 * (LR_Col.ts_amp + LR_Col.tp_amp)
+
+    #             # ray_troughput /= LR_Col.transmitt_coef
+
+    #             # if debug: print("\nTransmitting ray. R/T : {}/{}".format(LR_Col.reflected_coef, LR_Col.transmitt_coef))
+    #             # if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
+    #             # if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))
+        
+
+
+    #         # if current_direction < 1e-9:
+    #         #     break
+
+    #         # pos_history.append(current_pos)
+    #     return E_out
+    #     # return pos_history, ray_troughput, accumelated_radiance

@@ -13,6 +13,7 @@ class Material:
     class MateterialTypes:
         ABSORPTION_DATA = 0
         SINGLE_NK = 1
+        NK_DATA = 2
 
     def __init__(self, name: str, filename : str, temperature: float = 293.15, material_type=MateterialTypes.ABSORPTION_DATA):
         """
@@ -37,6 +38,8 @@ class Material:
         self.material_type = material_type
         if (material_type == Material.MateterialTypes.ABSORPTION_DATA):
             self.load_absorption_data()
+        elif (material_type == Material.MateterialTypes.NK_DATA):
+            self.load_nk_data(self.filename)
         
         # single complex index of refraction; used only when materialtype.single nk is used
         self.single_n = None
@@ -67,7 +70,6 @@ class Material:
         self.excitation_coef = np.zeros(len(self.wl))
         
         # Calculate the refractive index and excting coefficient
-        
         for i, wl in enumerate(self.wl):
             self.refractive_index[i], self.excitation_coef[i] = complex_refractive_index(wl, self.absorption_coef[i], self.temperature)
     
@@ -110,7 +112,29 @@ class Material:
                 k = k1 + (k2 - k1) * (wavelength_microns - wl1) / (wl2 - wl1)
                 
                 return n, k
-            
+
+    def load_nk_data(self, filename: str):
+        """
+        Loads wavelength-dependent complex refractive index (n and k) data from a CSV file
+        CSV format (no header): wavelength [µm], refractive index n, extinction coefficient k.
+        Computes absorption coefficient (cm⁻¹) from k.
+        """
+        # Load the data from CSV file (comma-separated, no header)
+        df = pd.read_csv(filename, header=None, names=['wl', 'n', 'k'])
+        # sort the data by wavelength
+        df = df.sort_values(by='wl')
+        # remove NaN values
+        df = df.dropna()
+
+        # set wavelength and complex index arrays
+        self.wl = df['wl'].values  # µm
+        self.refractive_index = df['n'].values
+        self.excitation_coef = df['k'].values
+        # compute absorption coefficient alpha [cm⁻¹]: alpha = 4 * pi * k / lambda_cm
+        # lambda_cm = wl [µm] * 1e-4 cm/µm
+        # thus alpha = 4*pi*k / (wl*1e-4) = 4*pi*k*1e4 / wl
+        self.absorption_coef = 4 * np.pi * self.excitation_coef * 1e4 / self.wl
+
     def get_alpha(self, wavelength_microns):
         """
             Returns alpha in cm^-1
