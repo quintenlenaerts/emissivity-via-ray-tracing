@@ -104,26 +104,68 @@ class LightRayCollision:
 
         # single Numba call replaces all unit‐vector, reflection, transmission
         # calculations + Fresnel:
-        refl_ang, trans_ang, R, T, rs, rp, ts, tp = optimized_lrcol(
-            # incoming ray source & end (µm)
-            incoming_ray.source_pos.x,
-            incoming_ray.source_pos.y,
-            incoming_ray.end_pos.x,
-            incoming_ray.end_pos.y,
-            # surface segment source & end (µm)
-            surface_ray.source_pos.x,
-            surface_ray.source_pos.y,
-            surface_ray.end_pos.x,
-            surface_ray.end_pos.y,
-            # complex indices
-            n1, k1,
-            n2, k2
-        )
+        # refl_ang, trans_ang, R, T, rs, rp, ts, tp = optimized_lrcol(
+        #     # incoming ray source & end (µm)
+        #     incoming_ray.source_pos.x,
+        #     incoming_ray.source_pos.y,
+        #     incoming_ray.end_pos.x,
+        #     incoming_ray.end_pos.y,
+        #     # surface segment source & end (µm)
+        #     surface_ray.source_pos.x,
+        #     surface_ray.source_pos.y,
+        #     surface_ray.end_pos.x,
+        #     surface_ray.end_pos.y,
+        #     # complex indices
+        #     n1, k1,
+        #     n2, k2
+        # )
 
-        self.reflected_angle   = refl_ang
-        self.transmitted_angle = trans_ang
-        self.reflected_coef    = R
-        self.transmitt_coef    = T
+        # self.reflected_angle   = refl_ang
+        # self.transmitted_angle = trans_ang
+        # self.reflected_coef    = R
+        # self.transmitt_coef    = T
+
+        # --- 1) compute the incident unit‐vector in 2D ---
+        in_vec = incoming_ray.end_pos - incoming_ray.source_pos
+        in_len = np.hypot(in_vec.x, in_vec.y)
+        unit_in = Vec2(in_vec.x / in_len, in_vec.y / in_len)
+
+        # --- 2) compute the surface‐tangent and normal (just like you already do) ---
+        surf_vec  = surface_ray.end_pos - surface_ray.source_pos
+        surf_len  = np.hypot(surf_vec.x, surf_vec.y)
+        unit_tan  = Vec2(surf_vec.x / surf_len, surf_vec.y / surf_len)
+        unit_norm = Vec2(-unit_tan.y, unit_tan.x)
+        # flip if it’s pointing the wrong way
+        if (unit_in.x*unit_norm.x + unit_in.y*unit_norm.y) > 0:
+            unit_norm = Vec2(-unit_norm.x, -unit_norm.y)
+
+        # --- 3) *now* compute the true reflected‐vector off that normal: ---
+        dot = unit_in.x*unit_norm.x + unit_in.y*unit_norm.y
+        refl = Vec2(
+          unit_in.x - 2*dot*unit_norm.x,
+          unit_in.y - 2*dot*unit_norm.y
+        )
+        self.reflected_angle = vector_to_angle(refl)
+
+        n1, k1 = mat_old.get_complex_index(wavelength_meters*1e6)
+        n2, k2 = mat_new.get_complex_index(wavelength_meters*1e6)
+        eta     = n1/n2
+
+        cos_i = -np.clip(unit_in.x*unit_norm.x + unit_in.y*unit_norm.y, -1.0, 1.0)
+        k_sq  = 1 - eta**2 * (1 - cos_i**2)
+        k_sq  = max(k_sq, 1e-12)
+
+        trans_vec = Vec2(
+          eta*unit_in.x + (eta*cos_i - np.sqrt(k_sq))*unit_norm.x,
+          eta*unit_in.y + (eta*cos_i - np.sqrt(k_sq))*unit_norm.y
+        )
+        self.transmitted_angle = vector_to_angle(trans_vec)
+
+        # fresnel coefficients (power)
+        R, T, rs, ts, rp, tp = fresnel_coefs_full(n1 + k1*1j, n2 + k2*1j, cos_i)
+        # self.reflected_coef = schlick_reflectance(n1, n2, cos_i)
+        self.reflected_coef = R
+        self.transmitt_coef  = T
 
         self.rs_amp = rs
         self.rp_amp = rp
@@ -131,47 +173,7 @@ class LightRayCollision:
         self.ts_amp = ts
         self.tp_amp = tp
 
-        # # --- 1) compute the incident unit‐vector in 2D ---
-        # in_vec = incoming_ray.end_pos - incoming_ray.source_pos
-        # in_len = np.hypot(in_vec.x, in_vec.y)
-        # unit_in = Vec2(in_vec.x / in_len, in_vec.y / in_len)
-
-        # # --- 2) compute the surface‐tangent and normal (just like you already do) ---
-        # surf_vec  = surface_ray.end_pos - surface_ray.source_pos
-        # surf_len  = np.hypot(surf_vec.x, surf_vec.y)
-        # unit_tan  = Vec2(surf_vec.x / surf_len, surf_vec.y / surf_len)
-        # unit_norm = Vec2(-unit_tan.y, unit_tan.x)
-        # # flip if it’s pointing the wrong way
-        # if (unit_in.x*unit_norm.x + unit_in.y*unit_norm.y) > 0:
-        #     unit_norm = Vec2(-unit_norm.x, -unit_norm.y)
-
-        # # --- 3) *now* compute the true reflected‐vector off that normal: ---
-        # dot = unit_in.x*unit_norm.x + unit_in.y*unit_norm.y
-        # refl = Vec2(
-        #   unit_in.x - 2*dot*unit_norm.x,
-        #   unit_in.y - 2*dot*unit_norm.y
-        # )
-        # self.reflected_angle = vector_to_angle(refl)
-
-        # n1, k1 = mat_old.get_complex_index(wavelength_meters*1e6)
-        # n2, k2 = mat_new.get_complex_index(wavelength_meters*1e6)
-        # eta     = n1/n2
-
-        # cos_i = -np.clip(unit_in.x*unit_norm.x + unit_in.y*unit_norm.y, -1.0, 1.0)
-        # k_sq  = 1 - eta**2 * (1 - cos_i**2)
-        # k_sq  = max(k_sq, 1e-12)
-
-        # trans_vec = Vec2(
-        #   eta*unit_in.x + (eta*cos_i - np.sqrt(k_sq))*unit_norm.x,
-        #   eta*unit_in.y + (eta*cos_i - np.sqrt(k_sq))*unit_norm.y
-        # )
-        # self.transmitted_angle = vector_to_angle(trans_vec)
-
-        # # fresnel coefficients (power)
-        # R, T = fresnel_coefs(n1 + k1*1j, n2 + k2*1j, cos_i)
-        # # self.reflected_coef = schlick_reflectance(n1, n2, cos_i)
-        # self.reflected_coef = R
-        # self.transmitt_coef  = T
+        
    
 
 class LightRay:

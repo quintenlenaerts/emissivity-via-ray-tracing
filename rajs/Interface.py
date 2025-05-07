@@ -353,6 +353,11 @@ class Interface:
 
         ray_troughput = 1.0 # will be used to determine when to stop
         accumelated_radiance = 0.0
+
+
+        # when a ray escapes we'll set the transmit angle to this variable
+        # that way we can do "angular" binning ==> set in current_direction variable?
+        # previous_transmittion_angle = None
         
 
         for bounce in range(max_depth):
@@ -374,6 +379,10 @@ class Interface:
 
             if LR_Col == None:
                 # no order is being hit
+                # if current_direction < 180:
+                #     print("Ray is escaping")
+                #     print(current_direction)
+
                 if debug: print("\nNo border being hit. Stopping.")
                 if debug: print("Current Pos : {}\tCurrent Dir: {}".format(current_pos, current_direction))
                 if debug: print("Current Troughput: {}\t Current Acc. Radiance: {}".format(ray_troughput, accumelated_radiance))

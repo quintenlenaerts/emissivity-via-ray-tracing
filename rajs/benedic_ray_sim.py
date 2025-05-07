@@ -21,7 +21,7 @@ N_rays              = 2000       # per thickness
 
 
 # array of film thicknesses to sweep (µm)
-thicknesses = np.linspace(20, 30, 50)
+thicknesses = np.linspace(0.2,0.8, 20)
 
 # Materials (n,k)
 mat_air = Material("Air", "", temperature, Material.MateterialTypes.SINGLE_NK)
@@ -112,7 +112,7 @@ if __name__ == "__main__":
             iface.ConnectBorders()
             iface.build_trimesh()
 
-            futures.append(pool.submit(sim_phase, iface, t))
+            futures.append(pool.submit(sim_once, iface, t))
 
         for i, f in enumerate(tqdm(futures, desc="Thickness sweep")):
             r_est, rad = f.result()

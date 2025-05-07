@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 from optics import complex_refractive_index
 
@@ -135,6 +136,40 @@ class Material:
         # thus alpha = 4*pi*k / (wl*1e-4) = 4*pi*k*1e4 / wl
         self.absorption_coef = 4 * np.pi * self.excitation_coef * 1e4 / self.wl
 
+
+    # ──────────────────────────────────────────────────────────────────────────
+    def save_nk_data(self, out_file: str | Path):
+        """
+        Save all wavelength‑dependent complex‑index data to a tab‑separated file.
+
+        Parameters
+        ----------
+        out_file : str | pathlib.Path
+            Destination filename.  Existing files will be overwritten.
+
+        File format
+        -----------
+        Wavelength [µm]   n   k        (tab separated, no index column)
+        0.400             1.50 0.012
+        0.405             1.49 0.013
+        ...
+        """
+        if self.wl is None or self.refractive_index is None or self.excitation_coef is None:
+            raise RuntimeError("Material data not initialised—load or create data first.")
+
+        df = pd.DataFrame(
+            {
+                "Wavelength (microns)": self.wl,
+                "n": self.refractive_index,
+                "k": self.excitation_coef,
+            }
+        )
+
+        # Ensure parent directory exists, then write as TSV
+        out_path = Path(out_file).expanduser().resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_path, sep="\t", index=False)
+
     def get_alpha(self, wavelength_microns):
         """
             Returns alpha in cm^-1
@@ -170,7 +205,7 @@ class Material:
                 alpha = alpha1 + (alpha2 - alpha1) * (wavelength_microns - wl1) / (wl2 - wl1)
                 
                 return alpha
-            
+        
             
     def make_tables(self, wls):
         """
@@ -194,6 +229,7 @@ class Material:
             self.a_table[i] = alpha
             
         print(self.n_table, self.a_table)
+    
             
 
             
